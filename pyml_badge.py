@@ -18,8 +18,9 @@ def init_badge():
         sleep(0.1)
         pass
 
+
 def show_message(message):
-    ugfx.clear(ugfx.WHITE);
+    ugfx.clear(ugfx.WHITE)
     ugfx.string(10, 10, message, "Roboto_Regular12", 0)
     ugfx.flush()
 
@@ -111,7 +112,6 @@ class Listener:
         show_message("'file' is not yet implemented")
 
 
-
 class InputHandler:
 
     state_map = {
@@ -151,7 +151,6 @@ class InputHandler:
                 break
             sleep(0.05)
 
-
     def handle_btn(self, btn_id, pressed):
         self.states[btn_id] = int(pressed)
         self.controller.send_key_states(self.states)
@@ -168,5 +167,6 @@ def main():
 
     while True:
         sleep(0.01)
+
 
 main()
