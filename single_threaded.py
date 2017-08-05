@@ -1,4 +1,4 @@
-import ugfx, gc, badge
+import ugfx, gc, badge, wifi
 import network
 from time import sleep
 
@@ -19,7 +19,7 @@ states = [0 for _ in range(14)]
 
 
 def handle_btn(btn_id, pressed):
-    print("button pressed: {}".format(btn_id))
+    show_message("button pressed: {}".format(btn_id))
     states[btn_id] = int(pressed)
     send_key_states(uid, states, control_sock, control_dest)
 
@@ -43,12 +43,16 @@ def init_badge():
 
 
 def init_wifi():
-    sta_if = network.WLAN(network.STA_IF)
-    sta_if.active(True)
-    sta_if.scan()
-    sta_if.connect("SHA2017-insecure")
-    sta_if.isconnected()
-    sta_if.ifconfig()
+    wifi.init()
+    show_message("Waiting for wifi...")
+
+    # Wait for WiFi connection
+    i = 0
+    while not wifi.sta_if.isconnected():
+        show_message('Waiting: {}'.format(i))
+        sleep(0.3)
+        i += 1
+    show_message("Connected")
 
 
 def show_message(message):
@@ -88,7 +92,7 @@ def handle_read(data):
 
 
 def handle_uid(_uid):
-    print("got uid: {}".format(data))
+    show_message("got uid: {}".format(data))
     global uid
     uid = _uid
     init_inputs()
@@ -98,7 +102,11 @@ def send_key_states(uid, states, socket, addr):
     command = '/controller/{uid}/states/{states}'.format(
             uid=uid, states=''.join(map(str, states))
     )
-    socket.sendto(command.encode('utf-8'), addr)
+    try:
+        socket.sendto(command.encode('utf-8'), addr)
+    except Exception as e:
+        print(str(e))
+        show_message(str(e))
 
 
 init_badge()
@@ -113,13 +121,13 @@ init_wifi()
 listen_port = 1339
 listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
 listen_sock.setblocking(False)
-addrinfo = socket.getaddrinfo('0.0.0.0', listen_port)
-listen_sock.bind(addrinfo[0][-1])
+# addrinfo = socket.getaddrinfo('0.0.0.0', listen_port)
+listen_sock.bind(('0.0.0.0', listen_port))
 
 # controller
 control_port = 1338
 control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
-control_dest = socket.getaddrinfo('127.0.0.1', control_port)[0][-1]
+control_dest = socket.getaddrinfo('control.ilexlux.xyz', control_port)[0][-1]
 
 # register control
 command = '/controller/new/{port}'.format(port=listen_port)
@@ -128,11 +136,13 @@ control_sock.sendto(command.encode('utf-8'), control_dest)
 # main loop
 show_message("Entering main loop.")
 
+i = 0
 while True:
     try:
+        show_message("Counting {}".format(i))
+        i += 1
         data, addr = listen_sock.recvfrom(1024)
         handle_read(data)
     except:
         pass
     sleep(0.01)
-
