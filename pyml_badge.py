@@ -1,6 +1,7 @@
 import ugfx
 import badge
 import wifi
+import network
 from time import sleep
 
 import usocket as socket
@@ -35,15 +36,18 @@ def handle_right(pressed):
     handle_key(state_map['right'], int(pressed))
 
 
-def connect_to_wifi():
+def connect_to_wifi(ssid='pymlbadge', password='pymlbadge'):
     show_message("Waiting for wifi...")
 
-    # Wait for WiFi connection
-    i = 0
-    while not wifi.sta_if.isconnected():
-        show_message('Waiting: {}'.format(i))
-        sleep(0.3)
-        i += 1
+    wlan = network.WLAN(network.STA_IF)
+    if not wlan.active() or not wlan.isconnected():
+        wlan.active(True)
+        print('connecting to:', ssid)
+        wlan.connect(ssid, password)
+        while not wlan.isconnected():
+            sleep(0.1)
+
+    print('network config:', wlan.ifconfig())
     show_message("Connected")
 
 def init_badge():
@@ -125,39 +129,13 @@ class Connection:
         self.listening = False
 
     def _listener_loop(self):
-        print("listening for command")
         while self.listening:
             try:
                 data, addr = self.listen_sock.recvfrom(1024)
                 self.handle_read(data)
-                if not wifi.sta_if.isconnected():
-                    show_message("Not connected to Wifi anymore! Reconnecting")
-                    connect_to_wifi()
             except:
                 pass
             sleep(0.01)
-
-    def handle_btn(self, btn_id, pressed):
-        print("button pressed: {}".format(btn_id))
-        states[btn_id] = int(pressed)
-        self.send_key_states(states)
-
-    def handle_up(self, pressed):
-        states[state_map['up']] = int(pressed)
-        self.send_key_states(states)
-
-    def handle_down(self, pressed):
-        states[state_map['down']] = int(pressed)
-        self.send_key_states(states)
-
-    def handle_left(self, pressed):
-        states[state_map['left']] = int(pressed)
-        self.send_key_states(states)
-
-    def handle_right(self, pressed):
-        states[state_map['right']] = int(pressed)
-        self.send_key_states(states)
-
 
     def init_inputs(self):
         print("initializing input callbacks")
@@ -172,17 +150,17 @@ class Connection:
         ugfx.input_attach(ugfx.BTN_START, handle_up)
 
     def ping(self):
-        command = '/controller/{uid}/ping/{port}'.format(uid=self.uid,
-                                                         port=self.port)
+        command = '/controller/{uid}/ping/{port}'.format(
+            uid=self.uid,
+            port=self.port
+        )
         socket.sendto(command.encode('utf-8'), self.control_dest)
 
     def send_key_states(self, states):
-        # control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
         command = '/controller/{uid}/states/{states}'.format(
                 uid=self.uid, states=''.join(map(str, states)))
 
-        self.control_sock.sendto(command.encode('utf-8'), self.control_dest)
-        # control_sock.close()
+        self.listen_sock.sendto(command.encode('utf-8'), self.control_dest)
 
 
 init_badge()
@@ -190,8 +168,5 @@ init_badge()
 destination = 'control.ilexlux.xyz'
 show_message("Connecting to {}".format(destination))
 
-connection = Connection(1339, destination, 1338)
+connection = Connection(1338, destination, 1338)
 connection.start_listening()
-
-
-# main()
