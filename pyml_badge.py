@@ -18,12 +18,24 @@ state_map = {
 }
 states = [0 for _ in range(14)]
 
+def handle_key(id, pressed):
+    states[id] = pressed
+    connection.send_key_states(states)
 
-def init_badge():
-    badge.init()
-    ugfx.init()
+def handle_up(pressed):
+    handle_key(state_map['up'], int(pressed))
 
-    wifi.init()
+def handle_down(pressed):
+    handle_key(state_map['down'], int(pressed))
+
+def handle_left(pressed):
+    handle_key(state_map['left'], int(pressed))
+
+def handle_right(pressed):
+    handle_key(state_map['right'], int(pressed))
+
+
+def connect_to_wifi():
     show_message("Waiting for wifi...")
 
     # Wait for WiFi connection
@@ -33,6 +45,13 @@ def init_badge():
         sleep(0.3)
         i += 1
     show_message("Connected")
+
+def init_badge():
+    badge.init()
+    ugfx.init()
+
+    wifi.init()
+    connect_to_wifi()
 
 
 def show_message(message):
@@ -54,8 +73,12 @@ class Connection:
         self.listen_sock.bind(addr[0][-1])
 
         self.control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
-        self.control_dest = socket.getaddrinfo(control_addr, control_port)[0][-1]
+        self.control_dest = []
+        while len(self.control_dest) == 0:
+            self.control_dest = socket.getaddrinfo(control_addr, control_port)
+        self.control_dest = self.control_dest[0][-1]
 
+        print("registering")
         self.register()
 
     def ready(self):
@@ -91,6 +114,7 @@ class Connection:
 
     def handle_uid(self, data):
         self.uid = data
+        print("Got UID {}".format(data))
         self.init_inputs()
 
     def start_listening(self):
@@ -101,10 +125,14 @@ class Connection:
         self.listening = False
 
     def _listener_loop(self):
+        print("listening for command")
         while self.listening:
             try:
                 data, addr = self.listen_sock.recvfrom(1024)
                 self.handle_read(data)
+                if not wifi.sta_if.isconnected():
+                    show_message("Not connected to Wifi anymore! Reconnecting")
+                    connect_to_wifi()
             except:
                 pass
             sleep(0.01)
@@ -114,17 +142,34 @@ class Connection:
         states[btn_id] = int(pressed)
         self.send_key_states(states)
 
+    def handle_up(self, pressed):
+        states[state_map['up']] = int(pressed)
+        self.send_key_states(states)
+
+    def handle_down(self, pressed):
+        states[state_map['down']] = int(pressed)
+        self.send_key_states(states)
+
+    def handle_left(self, pressed):
+        states[state_map['left']] = int(pressed)
+        self.send_key_states(states)
+
+    def handle_right(self, pressed):
+        states[state_map['right']] = int(pressed)
+        self.send_key_states(states)
+
+
     def init_inputs(self):
         print("initializing input callbacks")
         ugfx.input_init()
-        ugfx.input_attach(ugfx.JOY_UP, lambda pressed: handle_btn(state_map['up'], pressed))
-        ugfx.input_attach(ugfx.JOY_DOWN, lambda pressed: handle_btn(state_map['down'], pressed))
-        ugfx.input_attach(ugfx.JOY_LEFT, lambda pressed: handle_btn(state_map['left'], pressed))
-        ugfx.input_attach(ugfx.JOY_RIGHT, lambda pressed: handle_btn(state_map['right'], pressed))
-        ugfx.input_attach(ugfx.BTN_A, lambda pressed: handle_btn(state_map['a'], pressed))
-        ugfx.input_attach(ugfx.BTN_B, lambda pressed: handle_btn(state_map['b'], pressed))
-        ugfx.input_attach(ugfx.BTN_SELECT, lambda pressed: handle_btn(state_map['select'], pressed))
-        ugfx.input_attach(ugfx.BTN_START, lambda pressed: handle_btn(state_map['start'], pressed))
+        ugfx.input_attach(ugfx.JOY_UP, handle_up)
+        ugfx.input_attach(ugfx.JOY_DOWN, handle_down)
+        ugfx.input_attach(ugfx.JOY_LEFT, handle_left)
+        ugfx.input_attach(ugfx.JOY_RIGHT, handle_right)
+        ugfx.input_attach(ugfx.BTN_A, handle_up)
+        ugfx.input_attach(ugfx.BTN_B, handle_up)
+        ugfx.input_attach(ugfx.BTN_SELECT, handle_up)
+        ugfx.input_attach(ugfx.BTN_START, handle_up)
 
     def ping(self):
         command = '/controller/{uid}/ping/{port}'.format(uid=self.uid,
@@ -132,28 +177,21 @@ class Connection:
         socket.sendto(command.encode('utf-8'), self.control_dest)
 
     def send_key_states(self, states):
+        # control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
         command = '/controller/{uid}/states/{states}'.format(
                 uid=self.uid, states=''.join(map(str, states)))
-        try:
-            self.control_sock.sendto(command.encode('utf-8'), self.control_dest)
-        except Exception as e:
-            print(str(e))
+
+        self.control_sock.sendto(command.encode('utf-8'), self.control_dest)
+        # control_sock.close()
 
 
-def main():
-    init_badge()
+init_badge()
 
-    destination = 'control.ilexlux.xyz'
-    show_message("Connecting to {}".format(destination))
+destination = 'control.ilexlux.xyz'
+show_message("Connecting to {}".format(destination))
 
-    connection = Connection(1339, destination, 1338)
-    connection.start_listening()
-
-    while not connection.ready():
-        sleep(0.2)
-
-    show_message("Got uid: {}\nInitializing inputs...".format(connection.uid))
-    connection.init_inputs()
+connection = Connection(1339, destination, 1338)
+connection.start_listening()
 
 
-main()
+# main()
