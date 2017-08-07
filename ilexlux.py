@@ -38,7 +38,9 @@ def handle_right(pressed):
 
 def handle_start(pressed):
     show_message("Thank you and Good Bye")
-    connection.stop_listening()
+    if connection is not None:
+        connection.stop_listening()
+    appglue.home()
 
 
 def connect_to_wifi(ssid='pymlbadge', password='pymlbadge'):
@@ -58,6 +60,10 @@ def connect_to_wifi(ssid='pymlbadge', password='pymlbadge'):
 def init_badge():
     badge.init()
     ugfx.init()
+
+    # init controls for leaving the app in case wifi does not work
+    ugfx.input_init()
+    ugfx.input_attach(ugfx.BTN_START, handle_start)
 
     wifi.init()
     connect_to_wifi()
@@ -147,7 +153,6 @@ class Connection:
 
     def init_inputs(self):
         print("initializing input callbacks")
-        ugfx.input_init()
         ugfx.input_attach(ugfx.JOY_UP, handle_up)
         ugfx.input_attach(ugfx.JOY_DOWN, handle_down)
         ugfx.input_attach(ugfx.JOY_LEFT, handle_left)
@@ -155,7 +160,6 @@ class Connection:
         ugfx.input_attach(ugfx.BTN_A, handle_up)
         ugfx.input_attach(ugfx.BTN_B, handle_up)
         ugfx.input_attach(ugfx.BTN_SELECT, handle_up)
-        ugfx.input_attach(ugfx.BTN_START, handle_start)
 
     def ping(self):
         command = '/controller/{uid}/ping/{port}'.format(
@@ -174,7 +178,7 @@ class Connection:
 
         self.socket.sendto(command.encode('utf-8'), self.remote_addr)
 
-
+connection = None
 init_badge()
 
 destination = 'control.ilexlux.xyz'
@@ -182,4 +186,3 @@ show_message("Connecting to {}".format(destination))
 
 connection = Connection(destination, 1338)
 connection.start_listening()
-appglue.home()
