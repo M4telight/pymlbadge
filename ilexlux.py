@@ -3,8 +3,7 @@ import ugfx
 import badge
 import wifi
 import network
-import sys
-from time import sleep
+import time
 
 import usocket as socket
 
@@ -51,7 +50,7 @@ def connect_to_wifi(ssid='pymlbadge', password='pymlbadge'):
         print('connecting to:', ssid)
         wlan.connect(ssid, password)
         while not wlan.isconnected():
-            sleep(0.1)
+            time.sleep(0.1)
 
     print('network config:', wlan.ifconfig())
     show_message("Connected")
@@ -72,21 +71,21 @@ def show_message(message):
 
 class Connection:
 
-    def __init__(self, listen_port, control_addr, control_port):
+    def __init__(self, remote_addr, port):
         self.uid = None
 
-        self.listen_port = listen_port
-        self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
-        self.listen_sock.setblocking(False)
-        # self.listen_sock.bind(('0.0.0.0', self.listen_port))
-        addr = socket.getaddrinfo('0.0.0.0', listen_port)
-        self.listen_sock.bind(addr[0][-1])
+        self.port = port
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
+        self.socket.setblocking(False)
+        addr = socket.getaddrinfo('0.0.0.0', port)
+        self.socket.bind(addr[0][-1])
 
-        self.control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
-        self.control_dest = []
-        while len(self.control_dest) == 0:
-            self.control_dest = socket.getaddrinfo(control_addr, control_port)
-        self.control_dest = self.control_dest[0][-1]
+        self.remote_addr = []
+        while len(self.remote_addr) == 0:
+            self.remote_addr = socket.getaddrinfo(remote_addr, port)
+        self.remote_addr = self.remote_addr[0][-1]
+
+        self.last_ping = 0
 
         print("registering")
         self.register()
@@ -95,9 +94,9 @@ class Connection:
         return self.uid is not None
 
     def register(self):
-        command = '/controller/new/{port}'.format(port=self.listen_port)
+        command = '/controller/new/{port}'.format(port=self.port)
         try:
-            self.control_sock.sendto(command.encode('utf-8'), self.control_dest)
+            self.socket.sendto(command.encode('utf-8'), self.remote_addr)
         except Exception as ex:
             print("failed to register controller: {}".format(ex))
 
@@ -136,12 +135,15 @@ class Connection:
 
     def _listener_loop(self):
         while self.listening:
+            # ping every 20 seconds
+            if time.time() - self.last_ping >= 20:
+                self.ping()
             try:
-                data, addr = self.listen_sock.recvfrom(1024)
+                data, addr = self.socket.recvfrom(1024)
                 self.handle_read(data)
             except:
                 pass
-            sleep(0.01)
+            time.sleep(0.01)
 
     def init_inputs(self):
         print("initializing input callbacks")
@@ -160,13 +162,17 @@ class Connection:
             uid=self.uid,
             port=self.port
         )
-        socket.sendto(command.encode('utf-8'), self.control_dest)
+        try:
+            self.socket.sendto(command.encode('utf-8'), self.remote_addr)
+        except:
+            print("warning: ping failed")
+        self.last_ping = time.time()
 
     def send_key_states(self, states):
         command = '/controller/{uid}/states/{states}'.format(
                 uid=self.uid, states=''.join(map(str, states)))
 
-        self.listen_sock.sendto(command.encode('utf-8'), self.control_dest)
+        self.socket.sendto(command.encode('utf-8'), self.remote_addr)
 
 
 init_badge()
@@ -174,6 +180,6 @@ init_badge()
 destination = 'control.ilexlux.xyz'
 show_message("Connecting to {}".format(destination))
 
-connection = Connection(1338, destination, 1338)
+connection = Connection(destination, 1338)
 connection.start_listening()
 appglue.home()
